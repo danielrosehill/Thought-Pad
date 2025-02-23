@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QIcon, QKeySequence, QTextCharFormat, QColor, QPalette
 import numpy as np
-import openai
+from openai import OpenAI
 from pathlib import Path
 import threading
 import queue
@@ -45,22 +45,23 @@ class TranscribeWorker(QThread):
             if not self.api_key:
                 raise ValueError("OpenAI API key not set")
 
-            openai.api_key = self.api_key
+            client = OpenAI(api_key=self.api_key)
             
             with open(self.audio_path, 'rb') as audio_file:
-                transcript = openai.Audio.transcribe(
-                    "whisper-1",
-                    audio_file
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file
                 )
-            self.finished.emit(transcript["text"])
+            self.finished.emit(transcript.text)
         except FileNotFoundError as e:
             self.error.emit(f"Audio file error: {str(e)}")
-        except openai.error.AuthenticationError:
-            self.error.emit("Invalid OpenAI API key")
-        except openai.error.RateLimitError:
-            self.error.emit("OpenAI API rate limit exceeded")
         except Exception as e:
-            self.error.emit(f"Transcription error: {str(e)}")
+            if "authentication" in str(e).lower():
+                self.error.emit("Invalid OpenAI API key")
+            elif "rate limit" in str(e).lower():
+                self.error.emit("OpenAI API rate limit exceeded")
+            else:
+                self.error.emit(f"Transcription error: {str(e)}")
 
 class FormatWorker(QThread):
     finished = pyqtSignal(str)
@@ -74,8 +75,8 @@ class FormatWorker(QThread):
 
     def run(self):
         try:
-            openai.api_key = self.api_key
-            response = openai.ChatCompletion.create(
+            client = OpenAI(api_key=self.api_key)
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 temperature=self.temperature,
                 messages=[
@@ -97,7 +98,7 @@ For the content:
                     {"role": "user", "content": self.text}
                 ]
             )
-            self.finished.emit(response.choices[0].message['content'])
+            self.finished.emit(response.choices[0].message.content)
         except Exception as e:
             self.error.emit(str(e))
 
