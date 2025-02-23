@@ -3,60 +3,83 @@ import os
 import sys
 import site
 import shutil
+import glob
 from pathlib import Path
 import PyQt6
 
 def get_qt_paths():
     """Get the Qt directory paths."""
-    qt_root = os.path.dirname(PyQt6.__file__)
+    system_lib_path = '/usr/lib64'
+    venv_path = os.path.dirname(os.path.dirname(sys.executable))
+    lib_path = os.path.join(venv_path, 'lib64', 'python3.11', 'site-packages', 'PyQt6')
+    if not os.path.exists(lib_path):
+        lib_path = os.path.join(venv_path, 'lib', 'python3.11', 'site-packages', 'PyQt6')
+    
     paths = {
-        'root': qt_root,
-        'plugins': os.path.join(qt_root, "Qt6", "plugins"),
-        'libs': os.path.join(qt_root, "Qt6", "lib"),
-        'translations': os.path.join(qt_root, "Qt6", "translations")
+        'root': lib_path,
+        'plugins': os.path.join(lib_path, "Qt6", "plugins"),
+        'libs': os.path.join(lib_path, "Qt6", "lib"),
+        'translations': os.path.join(lib_path, "Qt6", "translations"),
+        'qml': os.path.join(lib_path, "Qt6", "qml"),
+        'system_libs': system_lib_path
     }
     
-    # Try alternative locations if not found
-    if not os.path.exists(paths['plugins']):
-        for prefix in site.getsitepackages():
-            alt_root = os.path.join(prefix, "PyQt6")
-            if os.path.exists(os.path.join(alt_root, "Qt6", "plugins")):
-                paths = {
-                    'root': alt_root,
-                    'plugins': os.path.join(alt_root, "Qt6", "plugins"),
-                    'libs': os.path.join(alt_root, "Qt6", "lib"),
-                    'translations': os.path.join(alt_root, "Qt6", "translations")
-                }
-                break
+    # Print paths for debugging
+    print("PyQt6 paths:")
+    for key, value in paths.items():
+        print(f"{key}: {value}")
+        print(f"Exists: {os.path.exists(value)}")
     
     return paths
 
 def main():
     # Get the Qt paths
     qt_paths = get_qt_paths()
-    if not qt_paths['plugins']:
-        print("Error: Could not find Qt plugins directory")
-        sys.exit(1)
     
     # Create the spec file content
-    spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+    spec_content = '''# -*- mode: python ; coding: utf-8 -*-
 import os
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+import glob
+from PyInstaller.utils.hooks import collect_all, collect_data_files, copy_metadata
 
-block_cipher = None
+datas = []
+binaries = []
+hiddenimports = []
 
-# Collect all PyQt6 dependencies
-qt_data, qt_binaries, qt_hiddenimports = collect_all('PyQt6')
+# Add PyQt6 metadata
+datas += copy_metadata('PyQt6')
 
-# Additional data files for audio and other dependencies
-additional_data = collect_data_files('sounddevice') + collect_data_files('numpy')
+# Add system Qt libraries
+system_qt_libs = glob.glob(''' + f"'{qt_paths['system_libs']}/libQt6*.so*'" + ''')
+for lib in system_qt_libs:
+    binaries.append((lib, '.'))
+
+# Add PyQt6 plugins
+plugin_dirs = ['platforms', 'styles']
+for plugin_dir in plugin_dirs:
+    plugin_path = os.path.join(''' + f"'{qt_paths['plugins']}'" + ''', plugin_dir)
+    if os.path.exists(plugin_path):
+        for file in glob.glob(os.path.join(plugin_path, '*.so*')):
+            binaries.append((file, os.path.join('PyQt6', 'Qt6', 'plugins', plugin_dir)))
+
+# Collect all dependencies
+packages = ['PyQt6', 'openai', 'sounddevice', 'numpy', 'matplotlib', 'python-docx', 'fpdf2', 'pyqtgraph']
+for package in packages:
+    try:
+        print("Collecting " + package)
+        data, bin, himp = collect_all(package)
+        datas += data
+        binaries += bin
+        hiddenimports += himp
+    except Exception as e:
+        print("Warning: Error collecting " + package + ": " + str(e))
 
 a = Analysis(
     ['app/main.py'],
     pathex=[],
-    binaries=qt_binaries,
-    datas=qt_data + additional_data,
-    hiddenimports=qt_hiddenimports + [
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports + [
         'PyQt6.sip',
         'PyQt6.QtCore',
         'PyQt6.QtGui',
@@ -71,44 +94,52 @@ a = Analysis(
         'pyqtgraph',
     ],
     hookspath=[],
-    hooksconfig={{
-        'PyQt6': {{
+    hooksconfig={
+        'PyQt6': {
             'style_plugins': ['qwindowsvistastyle', 'qmacstyle', 'qdmanstyle'],
             'gui_plugins': ['platforms', 'platformthemes', 'styles'],
             'network_plugins': ['networkaccess'],
-        }}
-    }},
+        }
+    },
     runtime_hooks=[],
     excludes=['tkinter', 'PySide6', 'PyQt5'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=block_cipher,
+    cipher=None,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='thoughtpad',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,  # Changed from /tmp/thoughtpad_runtime to None for better portability
-    console=False,  # Changed to False for a cleaner GUI application
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Add an icon path here if you have one
+    icon=None,
+)
+
+# Create a directory containing the executable and all dependencies
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='thoughtpad'
 )
 '''
     
