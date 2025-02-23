@@ -4,17 +4,17 @@
 
 ![AI Generated](https://img.shields.io/badge/AI-Generated-blue) ![Sonnet 3.5](https://img.shields.io/badge/Sonnet-3.5-purple)
 
- ThoughtPad is a note-taking utility created for the Linux desktop. 
+ ThoughtPad is a note-taking utility created for the Linux desktop. It's a speech-to-text GUI for taking your thoughts and getting them into semi-coherent text!
  
- It leverages OpenAI Whisper (via API) for transcribing text dictated by the user. 
- 
- Once the initial transcription is completed, the text undergoes light formatting using GPT. 
- 
- Users can then download the formatted text in Markdown format.
+The app follows a two-stage process to create the cleaned up dictated text entries, both using OpenAI via the Whisper API (API ). 
+
+Firstly, speech to text (STT) using Whisper AI. Next, text formatting via GPT 3.5. 
 
  ## Use-Cases
 
- I created this app to streamline a common workflow where I create dictated text that requires light cleaning. By integrating speech-to-text and text formatting functionalities from the OpenAI API, I developed a single tool to simplify this process. The program also utilizes the LLM for intelligent title generation.
+ I created this app to streamline a common workflow where I create dictated text that requires light cleaning. 
+ 
+ By integrating speech-to-text and text formatting functionalities from the OpenAI API, I developed a single tool to simplify this process. The program also utilizes the LLM for intelligent title generation.
 
 My primary use case for this app is to efficiently record contextual data for a vector database. The app outputs to Markdown, but it is versatile and can be applied to various tasks like diary entries, blog creation using speech-to-text, or any other creative use you can imagine.
 
@@ -26,6 +26,13 @@ My primary use case for this app is to efficiently record contextual data for a 
 - User-friendly GUI interface
 - Real-time audio visualization
 - Cross-platform compatibility
+
+## Additional Features
+
+I may get around to adding the following:
+
+- User system prompt editing
+- System prompt library (choose between one of X saved system prompts to edit the text formatting style)
 
 ## Installation
 
