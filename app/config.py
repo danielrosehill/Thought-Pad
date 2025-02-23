@@ -14,7 +14,8 @@ class Config:
             "gpt_temperature": 0.3,
             "whisper_model": "base",
             "download_path": str(Path(os.path.expanduser("~/Desktop"))),
-            "include_raw_text": False  # Default to not including raw text in downloads
+            "include_raw_text": False,  # Default to not including raw text in downloads
+            "default_download_format": "Markdown"  # Default download format
         }
         self.current_config = {}
         self._ensure_config_exists()
