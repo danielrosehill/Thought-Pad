@@ -79,7 +79,21 @@ class FormatWorker(QThread):
                 model="gpt-3.5-turbo",
                 temperature=self.temperature,
                 messages=[
-                    {"role": "system", "content": "Your task is to edit this text which was captured using speech to text. You should edit it lightly for clarity. You must remove any artifacts of spoken text, like 'um,' which you can assume the user did not intend to be captured in the finished document. If the user says things like 'take that out of the note' then you must use your reasoning to identify which parts of the text the user was referring to and remove those from the edited transcript. You must make sure that all thoughts and details are captured in the transcribed text. In addition to the formatted text, you must also suggest a title which captures the main essence of the note."},
+                    {"role": "system", "content": """Your task is to edit text captured using speech to text and format it in two parts:
+1. A title that captures the main essence of the note
+2. The formatted content of the note
+
+Your response must follow this exact format:
+Title: [Your generated title here]
+[Blank line]
+[Your formatted content here]
+
+For the content:
+- Edit lightly for clarity
+- Remove speech artifacts (like 'um')
+- Remove any meta-instructions (like 'take that out of the note')
+- Ensure all important thoughts and details are preserved
+- Use proper paragraphs and formatting"""},
                     {"role": "user", "content": self.text}
                 ]
             )
@@ -260,10 +274,24 @@ class MainWindow(QMainWindow):
         self.stop_button.setStyleSheet(f"background-color: {COLORS['secondary']}; color: white;")
         self.reset_button.setStyleSheet(f"background-color: {COLORS['error']}; color: white;")
         
+        # Add recording time label
+        self.recording_time_label = QLabel("00:00")
+        self.recording_time_label.setStyleSheet("""
+            QLabel {
+                color: #666666;
+                font-size: 14px;
+                padding: 5px;
+                min-width: 60px;
+                text-align: right;
+            }
+        """)
+        
         controls_layout.addWidget(self.record_button)
         controls_layout.addWidget(self.pause_button)
         controls_layout.addWidget(self.stop_button)
         controls_layout.addWidget(self.reset_button)
+        controls_layout.addStretch()  # This pushes the time label to the right
+        controls_layout.addWidget(self.recording_time_label)
         main_layout_tab.addLayout(controls_layout)
 
         # Title display
@@ -278,6 +306,7 @@ class MainWindow(QMainWindow):
         # Text areas
         splitter = QSplitter(Qt.Vertical)
         
+        # Raw text container
         raw_container = QWidget()
         raw_layout = QVBoxLayout(raw_container)
         raw_label = QLabel("Raw Text:")
@@ -285,6 +314,32 @@ class MainWindow(QMainWindow):
         raw_layout.addWidget(raw_label)
         raw_layout.addWidget(self.raw_text)
         
+        # Format button between text areas
+        format_container = QWidget()
+        format_layout = QHBoxLayout(format_container)
+        format_layout.addStretch()
+        self.format_button = QPushButton("Format Text")
+        self.format_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #BDBDBD;
+            }
+        """)
+        self.format_button.setToolTip("Format Text (Ctrl+F)")
+        self.format_button.setShortcut(QKeySequence("Ctrl+F"))
+        format_layout.addWidget(self.format_button)
+        format_layout.addStretch()
+        
+        # Formatted text container
         formatted_container = QWidget()
         formatted_layout = QVBoxLayout(formatted_container)
         formatted_label = QLabel("Formatted Text:")
@@ -293,6 +348,7 @@ class MainWindow(QMainWindow):
         formatted_layout.addWidget(self.formatted_text)
         
         splitter.addWidget(raw_container)
+        splitter.addWidget(format_container)
         splitter.addWidget(formatted_container)
         main_layout_tab.addWidget(splitter)
 
@@ -301,7 +357,9 @@ class MainWindow(QMainWindow):
         self.word_count_label = QLabel("Words: 0")
         self.download_button = QPushButton("Download")
         self.download_button.setStyleSheet(f"background-color: {COLORS['primary']}; color: white;")
+        
         bottom_layout.addWidget(self.word_count_label)
+        bottom_layout.addStretch()
         bottom_layout.addWidget(self.download_button)
         main_layout_tab.addLayout(bottom_layout)
 
@@ -438,6 +496,7 @@ This tool uses OpenAI's Whisper and GPT models for transcription and text format
         self.pause_button.clicked.connect(self.toggle_pause)
         self.stop_button.clicked.connect(self.stop_recording)
         self.reset_button.clicked.connect(self.reset_all)
+        self.format_button.clicked.connect(self.format_text)
         self.download_button.clicked.connect(self.download_text)
         self.device_combo.currentIndexChanged.connect(self.change_audio_device)
 
@@ -490,8 +549,35 @@ This tool uses OpenAI's Whisper and GPT models for transcription and text format
         self.record_button.setText("Record")
         self.pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
+        self.recording_time_label.setText("00:00")
         self.recording_timer.stop()
         self.transcribe_audio()
+
+    def reset_all(self):
+        """Reset all fields and state to initial values."""
+        # Stop any ongoing recording
+        if self.audio_manager.recording:
+            self.audio_manager.stop_recording()
+        
+        # Clear text fields
+        self.title_display.clear()
+        self.raw_text.clear()
+        self.formatted_text.clear()
+        
+        # Reset buttons and labels
+        self.record_button.setText("Record")
+        self.pause_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
+        self.recording_time_label.setText("00:00")
+        self.recording_timer.stop()
+        self.update_status("Reset complete", color=COLORS['secondary'])
+
+    def update_recording_time(self):
+        """Update the recording time display."""
+        elapsed = int(time.time() - self.recording_start_time)
+        minutes = elapsed // 60
+        seconds = elapsed % 60
+        self.recording_time_label.setText(f"{minutes:02d}:{seconds:02d}")
 
     def on_transcription_complete(self, text):
         self.raw_text.setText(text)
@@ -517,6 +603,66 @@ This tool uses OpenAI's Whisper and GPT models for transcription and text format
         self.worker.finished.connect(self.on_transcription_complete)
         self.worker.error.connect(self.on_transcription_error)
         self.worker.start()
+
+    def format_text(self):
+        """Format the transcribed text using GPT."""
+        if not self.raw_text.toPlainText():
+            self.show_error("Error", "No text to format")
+            return
+            
+        self.update_status("Formatting text...", color=COLORS['accent'])
+        self.format_button.setEnabled(False)
+        
+        self.format_worker = FormatWorker(
+            self.config.api_key,
+            self.raw_text.toPlainText(),
+            self.config.get('gpt_temperature', 0.3)
+        )
+        self.format_worker.finished.connect(self._on_format_finished)
+        self.format_worker.error.connect(self._on_format_error)
+        self.format_worker.start()
+
+    @pyqtSlot(str)
+    def _on_format_finished(self, formatted_text):
+        """Handle formatted text result."""
+        try:
+            # First try to find the title line
+            lines = formatted_text.splitlines()
+            title = ""
+            content_start = 0
+            
+            # Find the title line and content start
+            for i, line in enumerate(lines):
+                if line.lower().startswith("title:"):
+                    title = line.replace("Title:", "").replace("title:", "").strip()
+                    content_start = i + 1
+                    break
+            
+            # Skip any empty lines after title
+            while content_start < len(lines) and not lines[content_start].strip():
+                content_start += 1
+                
+            # Get the content
+            content = "\n".join(lines[content_start:]).strip()
+            
+            if not title or not content:
+                raise ValueError("Could not extract title and content from response")
+            
+            # Update the UI
+            self.title_display.setText(title)
+            self.formatted_text.setText(content)
+            
+            self.format_button.setEnabled(True)
+            self.update_status("Text formatted successfully", color=COLORS['secondary'])
+        except Exception as e:
+            self._on_format_error(f"Error processing formatted text: {str(e)}")
+            print("Debug - Full response:", formatted_text)  # For debugging
+
+    @pyqtSlot(str)
+    def _on_format_error(self, error):
+        """Handle formatting error."""
+        self.show_error("Text formatting failed", error)
+        self.format_button.setEnabled(True)
 
     def download_text(self):
         """Download the formatted text using the title as filename"""
@@ -590,12 +736,6 @@ This tool uses OpenAI's Whisper and GPT models for transcription and text format
     def update_status(self, message, color="black"):
         self.status_bar.showMessage(message)
 
-    def update_recording_time(self):
-        elapsed = int(time.time() - self.recording_start_time)
-        minutes = elapsed // 60
-        seconds = elapsed % 60
-        self.recording_time_label.setText(f"{minutes:02d}:{seconds:02d}")
-
     def apply_stylesheet(self):
         self.setStyleSheet(f"""
             QMainWindow {{
@@ -628,20 +768,3 @@ This tool uses OpenAI's Whisper and GPT models for transcription and text format
                 padding: 4px;
             }}
         """)
-
-    def reset_all(self):
-        """Reset all fields and state to initial values."""
-        # Stop any ongoing recording
-        if self.audio_manager.recording:
-            self.audio_manager.stop_recording()
-        
-        # Clear text fields
-        self.title_display.clear()
-        self.raw_text.clear()
-        self.formatted_text.clear()
-        
-        # Reset buttons and labels
-        self.record_button.setText("Record")
-        self.pause_button.setEnabled(False)
-        self.stop_button.setEnabled(False)
-        self.update_status("Reset complete", color=COLORS['secondary'])
