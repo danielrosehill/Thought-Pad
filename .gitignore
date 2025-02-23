@@ -76,3 +76,8 @@ instance/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Config files
+~/.config/thought-pad/
+.config/thought-pad/
+config.json

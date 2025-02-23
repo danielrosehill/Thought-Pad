@@ -1,11 +1,13 @@
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QComboBox, QTextEdit, QLineEdit, QLabel, QMessageBox, QProgressBar,
     QSplitter, QInputDialog, QStatusBar, QToolButton, QFrame, QDialog,
-    QFormLayout, QMenuBar, QMenu, QAction, QFileDialog, QCheckBox, QTabWidget
+    QFormLayout, QMenuBar, QMenu, QFileDialog, QCheckBox, QTabWidget
 )
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QIcon, QKeySequence, QTextCharFormat, QColor, QPalette
+from PyQt6.QtGui import (
+    QIcon, QKeySequence, QTextCharFormat, QColor, QPalette, QAction
+)
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot
 import numpy as np
 from openai import OpenAI
 from pathlib import Path
@@ -115,7 +117,7 @@ class SettingsDialog(QDialog):
 
         # API Key
         self.api_key_input = QLineEdit(self.config.get("openai_api_key", ""))
-        self.api_key_input.setEchoMode(QLineEdit.Password)
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.show_api_key = QPushButton("Show")
         self.show_api_key.setCheckable(True)
         self.show_api_key.clicked.connect(self.toggle_api_key_visibility)
@@ -189,7 +191,7 @@ class SettingsDialog(QDialog):
 
     def toggle_api_key_visibility(self, checked):
         self.api_key_input.setEchoMode(
-            QLineEdit.Normal if checked else QLineEdit.Password
+            QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         )
 
     def browse_download_path(self):
@@ -305,7 +307,7 @@ class MainWindow(QMainWindow):
         main_layout_tab.addLayout(title_layout)
 
         # Text areas
-        splitter = QSplitter(Qt.Vertical)
+        splitter = QSplitter(Qt.Orientation.Vertical)
         
         # Raw text container
         raw_container = QWidget()
@@ -399,12 +401,13 @@ This tool uses OpenAI's Whisper and GPT models for transcription and text format
         settings_layout = QFormLayout(settings_tab)
         
         # API Key
-        self.api_key_input = QLineEdit(self.config.get("openai_api_key", ""))
-        self.api_key_input.setEchoMode(QLineEdit.Password)
+        api_key_layout = QHBoxLayout()
+        api_key_label = QLabel("OpenAI API Key:")
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.show_api_key = QPushButton("Show")
         self.show_api_key.setCheckable(True)
         self.show_api_key.clicked.connect(self.toggle_api_key_visibility)
-        api_key_layout = QHBoxLayout()
         api_key_layout.addWidget(self.api_key_input)
         api_key_layout.addWidget(self.show_api_key)
         settings_layout.addRow("OpenAI API Key:", api_key_layout)
@@ -442,7 +445,7 @@ This tool uses OpenAI's Whisper and GPT models for transcription and text format
 
     def toggle_api_key_visibility(self, checked):
         self.api_key_input.setEchoMode(
-            QLineEdit.Normal if checked else QLineEdit.Password
+            QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         )
 
     def browse_download_path(self):
