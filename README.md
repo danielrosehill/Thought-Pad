@@ -1,14 +1,17 @@
 # ThoughtPad
 
+![AI Generated](https://img.shields.io/badge/AI-Generated-blue) ![Sonnet 3.5](https://img.shields.io/badge/Sonnet-3.5-purple)
  ![alt text](screenshots/v1/3.png)
 
-![AI Generated](https://img.shields.io/badge/AI-Generated-blue) ![Sonnet 3.5](https://img.shields.io/badge/Sonnet-3.5-purple)
 
- ThoughtPad is a note-taking utility created for the Linux desktop. It's a speech-to-text GUI for taking your thoughts and getting them into semi-coherent text!
+
+ ThoughtPad is a note-taking utility created for the Linux desktop. 
+ 
+ It's a speech-to-text GUI for taking your thoughts and getting them into semi-coherent text!
  
 The app follows a two-stage process to create the cleaned up dictated text entries, both using OpenAI via the Whisper API (API ). 
 
-Firstly, speech to text (STT) using Whisper AI. Next, text formatting via GPT 3.5. 
+Firstly, speech to text (STT) using Whisper AI. Next, text formatting via GPT 3.5. The optimised transcript can then be quickly downloaded as a markdown file!
 
  ## Use-Cases
 
