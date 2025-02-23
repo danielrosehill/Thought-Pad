@@ -12,7 +12,9 @@ class Config:
             "preferred_audio_device": None,
             "auto_save_interval": 300,  # 5 minutes in seconds
             "gpt_temperature": 0.3,
-            "whisper_model": "base"
+            "whisper_model": "base",
+            "download_path": str(Path(os.path.expanduser("~/Desktop"))),
+            "include_raw_text": False  # Default to not including raw text in downloads
         }
         self.current_config = {}
         self._ensure_config_exists()

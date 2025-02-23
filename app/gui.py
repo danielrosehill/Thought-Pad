@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QComboBox, QTextEdit, QLineEdit, QLabel, QMessageBox, QProgressBar,
     QSplitter, QInputDialog, QStatusBar, QToolButton, QFrame, QDialog,
-    QFormLayout, QMenuBar, QMenu, QAction, QFileDialog
+    QFormLayout, QMenuBar, QMenu, QAction, QFileDialog, QCheckBox
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QIcon, QKeySequence, QTextCharFormat, QColor, QPalette
@@ -13,6 +13,7 @@ from pathlib import Path
 import threading
 import queue
 import time
+import os
 
 from config import Config
 from audio_manager import AudioManager
@@ -97,23 +98,20 @@ class SettingsDialog(QDialog):
 
     def setup_ui(self):
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(400)
         layout = QFormLayout(self)
 
         # API Key
-        self.api_key_input = QLineEdit(self.config.api_key)
+        self.api_key_input = QLineEdit(self.config.get("openai_api_key", ""))
         self.api_key_input.setEchoMode(QLineEdit.Password)
-        show_key_btn = QToolButton()
-        show_key_btn.setText("")
-        show_key_btn.setToolTip("Show/Hide API Key")
-        show_key_btn.setCheckable(True)
-        show_key_btn.clicked.connect(self.toggle_api_key_visibility)
+        self.show_api_key = QPushButton("Show")
+        self.show_api_key.setCheckable(True)
+        self.show_api_key.clicked.connect(self.toggle_api_key_visibility)
         
         api_key_layout = QHBoxLayout()
         api_key_layout.addWidget(self.api_key_input)
-        api_key_layout.addWidget(show_key_btn)
+        api_key_layout.addWidget(self.show_api_key)
         layout.addRow("OpenAI API Key:", api_key_layout)
-
+        
         # Default Microphone
         self.mic_combo = QComboBox()
         self.populate_audio_devices()
@@ -132,6 +130,20 @@ class SettingsDialog(QDialog):
         current_temp = str(self.config.get('gpt_temperature', 0.3))
         self.temp_combo.setCurrentText(current_temp)
         layout.addRow("GPT Temperature:", self.temp_combo)
+
+        # Download Path
+        self.download_path_input = QLineEdit(self.config.get("download_path", ""))
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.clicked.connect(self.browse_download_path)
+        download_path_layout = QHBoxLayout()
+        download_path_layout.addWidget(self.download_path_input)
+        download_path_layout.addWidget(self.browse_button)
+        layout.addRow("Download Path:", download_path_layout)
+
+        # Include Raw Text
+        self.include_raw_checkbox = QCheckBox("Include Original Text")
+        self.include_raw_checkbox.setChecked(self.config.get("include_raw_text", False))
+        layout.addRow("Include Original Text:", self.include_raw_checkbox)
 
         # Buttons
         button_box = QHBoxLayout()
@@ -160,6 +172,11 @@ class SettingsDialog(QDialog):
             QLineEdit.Normal if checked else QLineEdit.Password
         )
 
+    def browse_download_path(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Download Directory")
+        if path:
+            self.download_path_input.setText(path)
+
     def save_settings(self):
         # Save API Key
         api_key = self.api_key_input.text().strip()
@@ -175,6 +192,12 @@ class SettingsDialog(QDialog):
 
         # Save temperature
         self.config.set('gpt_temperature', float(self.temp_combo.currentText()))
+
+        # Save download path
+        self.config.set('download_path', self.download_path_input.text())
+
+        # Save include raw text setting
+        self.config.set('include_raw_text', self.include_raw_checkbox.isChecked())
 
         self.accept()
 
@@ -217,6 +240,7 @@ class MainWindow(QMainWindow):
             # Refresh UI based on new settings
             self.populate_audio_devices()
             self.format_combo.setCurrentText(self.config.get('default_export_format', 'Markdown'))
+            self.include_raw_checkbox.setChecked(self.config.get("include_raw_text", False))
 
     def setup_ui(self):
         self.setWindowTitle("Thought Pad")
@@ -225,7 +249,7 @@ class MainWindow(QMainWindow):
         # Create main widget and layout
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        main_layout = QHBoxLayout(main_widget)
+        main_layout = QVBoxLayout(main_widget)
 
         # Create splitter for left and right panes
         splitter = QSplitter(Qt.Horizontal)
@@ -308,7 +332,7 @@ class MainWindow(QMainWindow):
 
         # Raw transcribed text
         raw_layout = QHBoxLayout()
-        raw_label = QLabel("Transcribed Text:")
+        raw_label = QLabel("Raw Text:")
         self.edit_mode_btn = QToolButton()
         self.edit_mode_btn.setToolTip("Toggle Edit Mode (Ctrl+E)")
         self.edit_mode_btn.setText("")
@@ -334,22 +358,38 @@ class MainWindow(QMainWindow):
 
         # Bottom controls
         bottom_layout = QHBoxLayout()
+        
+        # Left side controls
+        left_controls = QHBoxLayout()
+        
+        # Format dropdown
+        self.format_label = QLabel("Format:")
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(["Text", "Markdown", "PDF", "DocX"])
+        left_controls.addWidget(self.format_label)
+        left_controls.addWidget(self.format_combo)
+        
+        # Include raw text checkbox
+        self.include_raw_checkbox = QCheckBox("Include Original Text")
+        self.include_raw_checkbox.setChecked(self.config.get("include_raw_text", False))
+        left_controls.addWidget(self.include_raw_checkbox)
+        
+        bottom_layout.addLayout(left_controls)
+        
+        # Right side buttons
+        right_buttons = QHBoxLayout()
+        right_buttons.addStretch()
+        
         self.format_button = QPushButton("Format Text")
         self.format_button.setToolTip("Format Text (Ctrl+F)")
         self.format_button.setShortcut(QKeySequence("Ctrl+F"))
+        right_buttons.addWidget(self.format_button)
         
-        self.download_button = QPushButton("Download All")
-        self.download_button.setToolTip("Download Note (Ctrl+D)")
-        self.download_button.setShortcut(QKeySequence("Ctrl+D"))
+        self.download_button = QPushButton("Download")
+        self.download_button.clicked.connect(self.download_text)
+        right_buttons.addWidget(self.download_button)
         
-        self.format_combo = QComboBox()
-        self.format_combo.addItems(["Markdown", "PDF", "DocX", "Text"])
-        default_format = self.config.get('default_export_format', 'Markdown')
-        self.format_combo.setCurrentText(default_format)
-        
-        bottom_layout.addWidget(self.format_button)
-        bottom_layout.addWidget(self.format_combo)
-        bottom_layout.addWidget(self.download_button)
+        bottom_layout.addLayout(right_buttons)
         right_layout.addLayout(bottom_layout)
 
         # Progress bar
@@ -490,41 +530,47 @@ class MainWindow(QMainWindow):
 
         title = self.title_edit.text() or "untitled"
         format_type = self.format_combo.currentText()
+        download_path = Path(self.config.get("download_path", str(Path(os.path.expanduser("~/Desktop")))))
+        include_raw = self.include_raw_checkbox.isChecked()
         
         try:
             if format_type == "Text":
                 file_path, _ = QFileDialog.getSaveFileName(
-                    self, "Save Text File", "", "Text Files (*.txt)"
+                    self, "Save Text File", 
+                    str(download_path / f"{title}.txt"),
+                    "Text Files (*.txt)"
                 )
                 if file_path:
+                    content = self.formatted_text.toPlainText()
+                    if include_raw:
+                        content += "\n\n---ORIGINAL TEXT---\n\n" + self.raw_text.toPlainText()
                     with open(file_path, 'w') as f:
-                        f.write(self.formatted_text.toPlainText())
+                        f.write(content)
             elif format_type == "Markdown":
-                self.save_markdown(title)
+                self.save_markdown(title, include_raw)
             elif format_type == "PDF":
-                self.save_pdf(title)
+                self.save_pdf(title, include_raw)
             else:  # DocX
-                self.save_docx(title)
+                self.save_docx(title, include_raw)
                 
             self.statusBar.showMessage(f"File saved successfully as {format_type}")
         except Exception as e:
             self.show_error("Save Error", f"Error saving file: {str(e)}")
 
-    def save_markdown(self, title):
-        content = (f"# {title}\n\n"
-                  f"{self.formatted_text.toPlainText()}\n\n"
-                  f"---FORMATTED---\n\n"
-                  f"{self.raw_text.toPlainText()}\n\n"
-                  f"---RAW---")
+    def save_markdown(self, title, include_raw=False):
+        content = f"# {title}\n\n{self.formatted_text.toPlainText()}"
+        if include_raw:
+            content += f"\n\n---ORIGINAL TEXT---\n\n{self.raw_text.toPlainText()}"
         
-        path = Path(f"{title}.md")
+        download_path = Path(self.config.get("download_path", str(Path(os.path.expanduser("~/Desktop")))))
+        path = download_path / f"{title}.md"
         try:
             path.write_text(content)
             QMessageBox.information(self, "Success", f"File saved as {path}")
         except Exception as e:
             self.show_error("Error saving file", str(e))
 
-    def save_pdf(self, title):
+    def save_pdf(self, title, include_raw=False):
         from fpdf import FPDF
         pdf = FPDF()
         pdf.add_page()
@@ -538,21 +584,25 @@ class MainWindow(QMainWindow):
         # Add formatted text
         pdf.set_font("Arial", size=12)
         pdf.multi_cell(0, 10, self.formatted_text.toPlainText())
-        pdf.ln(10)
         
-        # Add separator and raw text
-        pdf.cell(0, 10, "---FORMATTED---", ln=True)
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, self.raw_text.toPlainText())
-        pdf.cell(0, 10, "---RAW---", ln=True)
+        # Add raw text if requested
+        if include_raw:
+            pdf.ln(10)
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(0, 10, "Original Text", ln=True)
+            pdf.ln(5)
+            pdf.set_font("Arial", size=12)
+            pdf.multi_cell(0, 10, self.raw_text.toPlainText())
         
+        download_path = Path(self.config.get("download_path", str(Path(os.path.expanduser("~/Desktop")))))
+        output_path = download_path / f"{title}.pdf"
         try:
-            pdf.output(f"{title}.pdf")
-            QMessageBox.information(self, "Success", f"File saved as {title}.pdf")
+            pdf.output(str(output_path))
+            QMessageBox.information(self, "Success", f"File saved as {output_path}")
         except Exception as e:
             self.show_error("Error saving PDF", str(e))
 
-    def save_docx(self, title):
+    def save_docx(self, title, include_raw=False):
         from docx import Document
         doc = Document()
         
@@ -562,14 +612,16 @@ class MainWindow(QMainWindow):
         # Add formatted text
         doc.add_paragraph(self.formatted_text.toPlainText())
         
-        # Add separator and raw text
-        doc.add_paragraph("---FORMATTED---")
-        doc.add_paragraph(self.raw_text.toPlainText())
-        doc.add_paragraph("---RAW---")
+        # Add raw text if requested
+        if include_raw:
+            doc.add_heading("Original Text", level=1)
+            doc.add_paragraph(self.raw_text.toPlainText())
         
+        download_path = Path(self.config.get("download_path", str(Path(os.path.expanduser("~/Desktop")))))
+        output_path = download_path / f"{title}.docx"
         try:
-            doc.save(f"{title}.docx")
-            QMessageBox.information(self, "Success", f"File saved as {title}.docx")
+            doc.save(str(output_path))
+            QMessageBox.information(self, "Success", f"File saved as {output_path}")
         except Exception as e:
             self.show_error("Error saving DOCX", str(e))
 
