@@ -1,13 +1,14 @@
-from PyQt6.QtWidgets import (
+from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QComboBox, QTextEdit, QLineEdit, QLabel, QMessageBox, QProgressBar,
     QSplitter, QInputDialog, QStatusBar, QToolButton, QFrame, QDialog,
-    QFormLayout, QMenuBar, QMenu, QFileDialog, QCheckBox, QTabWidget
+    QFormLayout, QMenuBar, QMenu, QFileDialog, QCheckBox, QTabWidget,
+    QAction
 )
-from PyQt6.QtGui import (
-    QIcon, QKeySequence, QTextCharFormat, QColor, QPalette, QAction
+from PyQt5.QtGui import (
+    QIcon, QKeySequence, QTextCharFormat, QColor, QPalette
 )
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot
 import numpy as np
 from openai import OpenAI
 from pathlib import Path
@@ -15,9 +16,10 @@ import threading
 import queue
 import time
 import os
+import httpx
 
-from config import Config
-from audio_manager import AudioManager
+from app.config import Config
+from app.audio_manager import AudioManager
 
 # Define color scheme
 COLORS = {
@@ -47,7 +49,10 @@ class TranscribeWorker(QThread):
             if not self.api_key:
                 raise ValueError("OpenAI API key not set")
 
-            client = OpenAI(api_key=self.api_key)
+            client = OpenAI(
+                api_key=self.api_key,
+                http_client=httpx.Client()
+            )
             
             with open(self.audio_path, 'rb') as audio_file:
                 transcript = client.audio.transcriptions.create(
@@ -77,7 +82,11 @@ class FormatWorker(QThread):
 
     def run(self):
         try:
-            client = OpenAI(api_key=self.api_key)
+            client = OpenAI(
+                api_key=self.api_key,
+                http_client=httpx.Client()
+            )
+            
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 temperature=self.temperature,

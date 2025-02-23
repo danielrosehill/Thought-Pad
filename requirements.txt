@@ -1,4 +1,4 @@
-PyQt6==6.6.1
+PyQt5==5.15.10
 openai==1.12.0
 sounddevice==0.4.6
 numpy==1.26.3
@@ -7,3 +7,4 @@ python-docx==1.1.0  # For DocX export
 fpdf2==2.7.8  # For PDF export
 pyqtgraph==0.13.3  # For waveform visualization
 pyinstaller==6.4.0  # For creating executables
+httpx==0.27.0  # For OpenAI HTTP client
